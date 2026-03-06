@@ -79,12 +79,27 @@ dermis/
 
 The app launches with a **pill-button nav bar** at the top — identical to the web artifact — letting you jump to any of the 18 screens directly, grouped by Auth / Onboarding / Main.
 
-To use the full navigation flow instead, replace `App.tsx` content with:
+To use the full navigation flow instead, replace the entire contents of `App.tsx` with:
 
 ```tsx
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { AppProvider } from './src/state/AppState';
 import { AppNavigator } from './src/navigation/AppNavigator';
-export default function App() { return <AppNavigator />; }
+import { StatusBar } from 'expo-status-bar';
+
+export default function App() {
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AppProvider>
+        <StatusBar style="light" />
+        <AppNavigator />
+      </AppProvider>
+    </GestureHandlerRootView>
+  );
+}
 ```
+
+> **Note:** `GestureHandlerRootView` and `AppProvider` are required wrappers. Omitting them will cause a `useAppState must be used within AppProvider` runtime error.
 
 ---
 
@@ -166,3 +181,4 @@ const res = await fetch(
 | `@react-navigation/bottom-tabs` | Bottom tab bar |
 | `react-native-reanimated` | Smooth animations |
 | `react-native-safe-area-context` | Safe area handling |
+| `react-native-gesture-handler` | Gesture support (required root wrapper) |
