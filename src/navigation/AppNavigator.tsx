@@ -1,12 +1,12 @@
 // src/navigation/AppNavigator.tsx
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-import { Colors, FontSizes, FontWeights, Spacing, Radii } from '../theme';
+import { Colors, FontSizes, FontWeights } from '../theme';
 
 // Screens
 import { SplashScreen }               from '../screens/SplashScreen';
@@ -44,7 +44,7 @@ function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{ headerShown: false }}
-      tabBar={({ state, descriptors, navigation }) => (
+      tabBar={({ state, navigation }) => (
         <View style={tabStyles.bar}>
           {state.routes.map((route, index) => {
             const item = TAB_ITEMS[index];
@@ -74,18 +74,17 @@ function MainTabs() {
   );
 }
 
-// Home stack (includes active + alert)
+// ── Nested stacks inside tabs ─────────────────────────────────────────────
 function HomeTabStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-      <Stack.Screen name="Home"            component={HomeScreen} />
-      <Stack.Screen name="ExposureActive"  component={ExposureActiveScreen} />
-      <Stack.Screen name="SunscreenAlert"  component={SunscreenAlertScreen} />
+      <Stack.Screen name="Home"           component={HomeScreen} />
+      <Stack.Screen name="ExposureActive" component={ExposureActiveScreen} />
+      <Stack.Screen name="SunscreenAlert" component={SunscreenAlertScreen} />
     </Stack.Navigator>
   );
 }
 
-// Profile stack (includes settings + premium)
 function ProfileTabStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
@@ -96,24 +95,73 @@ function ProfileTabStack() {
   );
 }
 
-// Auth stack
+// ── Root Auth/Onboarding Stack ────────────────────────────────────────────
+// All screens live in one flat stack so that:
+//   Splash → replace('AuthLanding')           [new user / logged out]
+//   Splash → replace('MainTabs')              [returning authenticated user]
+//   LocationPermission → replace('MainTabs')  [onboarding complete – clears back stack]
+//   SignIn → replace('MainTabs')              [clears back stack so back ≠ auth screens]
 function AuthStack() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+    <Stack.Navigator
+      screenOptions={{ headerShown: false, animation: 'fade' }}
+      // ↓ Always start at Splash; it decides where to go next
+      initialRouteName="Splash"
+    >
+      {/* ── Splash ── */}
       <Stack.Screen name="Splash"              component={SplashScreen} />
+
+      {/* ── Auth group ── */}
       <Stack.Screen name="AuthLanding"         component={AuthLandingScreen} />
-      <Stack.Screen name="SignUp"              component={SignUpScreen} />
-      <Stack.Screen name="SignIn"              component={SignInScreen} />
-      <Stack.Screen name="ForgotPassword"      component={ForgotPasswordScreen} />
-      <Stack.Screen name="OnboardingWelcome"   component={OnboardingWelcomeScreen} />
-      <Stack.Screen name="OnboardingSkin"      component={OnboardingSkinScreen} />
-      <Stack.Screen name="OnboardingSunscreen" component={OnboardingSunscreenScreen} />
-      <Stack.Screen name="LocationPermission"  component={LocationPermissionScreen} />
-      <Stack.Screen name="MainTabs"            component={MainTabs} />
+      <Stack.Screen
+        name="SignUp"
+        component={SignUpScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="SignIn"
+        component={SignInScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="ForgotPassword"
+        component={ForgotPasswordScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+
+      {/* ── Onboarding group ── */}
+      <Stack.Screen
+        name="OnboardingWelcome"
+        component={OnboardingWelcomeScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="OnboardingSkin"
+        component={OnboardingSkinScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="OnboardingSunscreen"
+        component={OnboardingSunscreenScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="LocationPermission"
+        component={LocationPermissionScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+
+      {/* ── Main app ── */}
+      <Stack.Screen
+        name="MainTabs"
+        component={MainTabs}
+        options={{ animation: 'fade' }}
+      />
     </Stack.Navigator>
   );
 }
 
+// ── Tab styles ────────────────────────────────────────────────────────────
 const tabStyles = StyleSheet.create({
   bar: {
     height: 80,
@@ -162,11 +210,11 @@ export function AppNavigator() {
         theme={{
           dark: true,
           colors: {
-            primary: Colors.teal,
-            background: Colors.navy,
-            card: Colors.navyCard,
-            text: Colors.textPrimary,
-            border: Colors.border,
+            primary:      Colors.teal,
+            background:   Colors.navy,
+            card:         Colors.navyCard,
+            text:         Colors.textPrimary,
+            border:       Colors.border,
             notification: Colors.teal,
           },
         }}

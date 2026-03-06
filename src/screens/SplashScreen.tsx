@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontSizes, FontWeights, Spacing } from '../theme';
+import { useAppState } from '../state/AppState';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 interface Props {
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export function SplashScreen({ navigation }: Props) {
+  const { isAuthenticated, onboardingComplete } = useAppState();
+
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const ring1     = useRef(new Animated.Value(1)).current;
@@ -19,33 +22,68 @@ export function SplashScreen({ navigation }: Props) {
   const ring2Opacity = useRef(new Animated.Value(0.6)).current;
   const ring3Opacity = useRef(new Animated.Value(0.6)).current;
 
-  const animateRing = (scale: Animated.Value, opacity: Animated.Value, delay: number) => {
+  const animateRing = (
+    scale: Animated.Value,
+    opacity: Animated.Value,
+    delay: number,
+  ) => {
     Animated.loop(
       Animated.sequence([
         Animated.delay(delay),
         Animated.parallel([
-          Animated.timing(scale, { toValue: 1.6, duration: 2000, useNativeDriver: true, easing: Easing.out(Easing.ease) }),
-          Animated.timing(opacity, { toValue: 0, duration: 2000, useNativeDriver: true }),
+          Animated.timing(scale, {
+            toValue: 1.6,
+            duration: 2000,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.ease),
+          }),
+          Animated.timing(opacity, {
+            toValue: 0,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
         ]),
         Animated.parallel([
-          Animated.timing(scale, { toValue: 1, duration: 0, useNativeDriver: true }),
+          Animated.timing(scale,   { toValue: 1,   duration: 0, useNativeDriver: true }),
           Animated.timing(opacity, { toValue: 0.6, duration: 0, useNativeDriver: true }),
         ]),
-      ])
+      ]),
     ).start();
   };
 
   useEffect(() => {
+    // Entrance animation
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 600, delay: 200, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 6, delay: 200, useNativeDriver: true }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        delay: 200,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 6,
+        delay: 200,
+        useNativeDriver: true,
+      }),
     ]).start();
 
     animateRing(ring1, ring1Opacity, 0);
     animateRing(ring2, ring2Opacity, 600);
     animateRing(ring3, ring3Opacity, 1200);
 
-    const timer = setTimeout(() => navigation.replace('AuthLanding'), 2400);
+    // ── Navigation decision after 2.4 s ──────────────────────────────────
+    // Spec §5.1:
+    //   • Authenticated user  → skip auth, go straight to Home Dashboard
+    //   • New / logged-out    → Auth Landing
+    const timer = setTimeout(() => {
+      if (isAuthenticated && onboardingComplete) {
+        navigation.replace('MainTabs');
+      } else {
+        navigation.replace('AuthLanding');
+      }
+    }, 2400);
+
     return () => clearTimeout(timer);
   }, []);
 
@@ -55,7 +93,13 @@ export function SplashScreen({ navigation }: Props) {
       locations={[0, 1]}
       style={styles.root}
     >
-      <Animated.View style={{ opacity: fadeAnim, transform: [{ scale: scaleAnim }], alignItems: 'center' }}>
+      <Animated.View
+        style={{
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+          alignItems: 'center',
+        }}
+      >
         {/* Sun logo */}
         <View style={styles.logoWrapper}>
           <Animated.View style={[styles.ring, { transform: [{ scale: ring1 }], opacity: ring1Opacity }]} />
@@ -74,12 +118,8 @@ export function SplashScreen({ navigation }: Props) {
         <Text style={styles.tagline}>YOUR UV & SKIN GUARDIAN</Text>
       </Animated.View>
 
-      {/* Loading dots */}
-      <View style={styles.dots}>
-        {[0, 1, 2].map(i => (
-          <View key={i} style={[styles.dot, i === 0 && styles.dotActive, i === 1 && styles.dotWide]} />
-        ))}
-      </View>
+      {/* Version badge */}
+      <Text style={styles.version}>v1.0</Text>
     </LinearGradient>
   );
 }
@@ -95,62 +135,45 @@ const styles = StyleSheet.create({
     height: 120,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.xl2,
   },
   ring: {
     position: 'absolute',
     width: 120,
     height: 120,
     borderRadius: 60,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: Colors.teal,
   },
   sunCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#F59E0B',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.4,
-    shadowRadius: 20,
-    elevation: 10,
   },
   sunGlyph: {
-    fontSize: 48,
+    fontSize: 36,
+    color: '#fff',
   },
   wordmark: {
-    fontSize: FontSizes.display,
+    fontSize: 42,
     fontWeight: FontWeights.bold,
     color: Colors.textPrimary,
-    letterSpacing: -1,
-    marginBottom: Spacing.sm,
+    letterSpacing: 4,
+    marginBottom: Spacing.xs,
   },
   tagline: {
-    fontSize: FontSizes.sm,
+    fontSize: FontSizes.xs,
     color: Colors.textMuted,
-    letterSpacing: 2.4,
-    textTransform: 'uppercase',
+    letterSpacing: 3,
+    fontWeight: FontWeights.medium,
   },
-  dots: {
+  version: {
     position: 'absolute',
-    bottom: 80,
-    flexDirection: 'row',
-    gap: 6,
-    alignItems: 'center',
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.border,
-  },
-  dotActive: {
-    backgroundColor: Colors.teal,
-  },
-  dotWide: {
-    width: 24,
-    backgroundColor: Colors.teal,
+    bottom: 48,
+    fontSize: FontSizes.xs,
+    color: Colors.textMuted,
+    letterSpacing: 1,
   },
 });

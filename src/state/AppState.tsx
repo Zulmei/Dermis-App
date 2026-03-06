@@ -1,50 +1,72 @@
 // src/state/AppState.tsx
-import React, { createContext, useContext, useState, useRef, useEffect, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+} from 'react';
 import { defaultProfile, mockUVData, UserProfile } from '../data/mockData';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface TimerState {
   totalSeconds: number;
-  secondsLeft: number;
-  isRunning: boolean;
-  isPaused: boolean;
+  secondsLeft:  number;
+  isRunning:    boolean;
+  isPaused:     boolean;
 }
 
 interface AppContextType {
+  // Auth / session flags
+  isAuthenticated:       boolean;
+  setIsAuthenticated:    (v: boolean) => void;
+  onboardingComplete:    boolean;
+  setOnboardingComplete: (v: boolean) => void;
+
   // Profile
-  profile: UserProfile;
+  profile:    UserProfile;
   setProfile: (p: UserProfile) => void;
 
   // Timer
-  timer: TimerState;
-  startTimer: () => void;
-  pauseTimer: () => void;
-  resetTimer: () => void;
+  timer:       TimerState;
+  startTimer:  () => void;
+  pauseTimer:  () => void;
+  resetTimer:  () => void;
 
   // Solar budget
-  budgetUsedPct: number;
+  budgetUsedPct:    number;
   setBudgetUsedPct: (v: number) => void;
 
   // Settings
-  notifyReapply: boolean;
+  notifyReapply:    boolean;
   setNotifyReapply: (v: boolean) => void;
-  notifyExtreme: boolean;
+  notifyExtreme:    boolean;
   setNotifyExtreme: (v: boolean) => void;
-  gpsEnabled: boolean;
-  setGpsEnabled: (v: boolean) => void;
-  metricUnits: boolean;
-  setMetricUnits: (v: boolean) => void;
+  gpsEnabled:       boolean;
+  setGpsEnabled:    (v: boolean) => void;
+  metricUnits:      boolean;
+  setMetricUnits:   (v: boolean) => void;
 }
 
 // ── Context ───────────────────────────────────────────────────────────────
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  // ── Auth / onboarding state ───────────────────────────────────────────
+  // In production these would be hydrated from SecureStore / AsyncStorage.
+  // Default false so new installs always go through auth → onboarding.
+  const [isAuthenticated,       setIsAuthenticated]    = useState(false);
+  const [onboardingComplete,    setOnboardingComplete] = useState(false);
+
+  // ── Profile ───────────────────────────────────────────────────────────
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
 
-  // Timer — derive total seconds from skin type + SPF
+  // ── Timer ─────────────────────────────────────────────────────────────
   const calcTotalSeconds = (skinType: number, spf: number) => {
-    const baseMinutes: Record<number, number> = { 1: 12, 2: 24, 3: 32, 4: 48, 5: 72, 6: 120 };
+    const baseMinutes: Record<number, number> = {
+      1: 12, 2: 24, 3: 32, 4: 48, 5: 72, 6: 120,
+    };
     const base = baseMinutes[skinType] ?? 24;
     const spfMultiplier = spf > 0 ? Math.min(spf / 10 + 1, 4) : 1;
     return Math.round(base * spfMultiplier) * 60;
@@ -53,9 +75,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const initialSeconds = calcTotalSeconds(profile.skinType, profile.defaultSpf);
   const [timer, setTimer] = useState<TimerState>({
     totalSeconds: initialSeconds,
-    secondsLeft: initialSeconds,
-    isRunning: false,
-    isPaused: false,
+    secondsLeft:  initialSeconds,
+    isRunning:    false,
+    isPaused:     false,
   });
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -74,7 +96,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } else {
       if (intervalRef.current) clearInterval(intervalRef.current);
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [timer.isRunning, timer.isPaused]);
 
   const startTimer = useCallback(() => {
@@ -90,24 +114,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTimer({ totalSeconds: total, secondsLeft: total, isRunning: false, isPaused: false });
   }, [profile]);
 
+  // ── Misc state ────────────────────────────────────────────────────────
   const [budgetUsedPct, setBudgetUsedPct] = useState(0.65);
 
-  // Settings
   const [notifyReapply, setNotifyReapply] = useState(true);
   const [notifyExtreme, setNotifyExtreme] = useState(true);
-  const [gpsEnabled, setGpsEnabled] = useState(true);
-  const [metricUnits, setMetricUnits] = useState(false);
+  const [gpsEnabled,    setGpsEnabled]    = useState(true);
+  const [metricUnits,   setMetricUnits]   = useState(false);
 
   return (
-    <AppContext.Provider value={{
-      profile, setProfile,
-      timer, startTimer, pauseTimer, resetTimer,
-      budgetUsedPct, setBudgetUsedPct,
-      notifyReapply, setNotifyReapply,
-      notifyExtreme, setNotifyExtreme,
-      gpsEnabled, setGpsEnabled,
-      metricUnits, setMetricUnits,
-    }}>
+    <AppContext.Provider
+      value={{
+        isAuthenticated,       setIsAuthenticated,
+        onboardingComplete,    setOnboardingComplete,
+        profile,               setProfile,
+        timer,                 startTimer, pauseTimer, resetTimer,
+        budgetUsedPct,         setBudgetUsedPct,
+        notifyReapply,         setNotifyReapply,
+        notifyExtreme,         setNotifyExtreme,
+        gpsEnabled,            setGpsEnabled,
+        metricUnits,           setMetricUnits,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );
