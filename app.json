@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Dermis",
+    "slug": "dermis",
+    "version": "1.0.0",
+    "sdkVersion": "54.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.dermis.app"
+    },
+    "android": {
+      "package": "com.dermis.app"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": []
+  }
+}
