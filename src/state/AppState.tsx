@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useCallback,
 } from 'react';
+import * as Location from 'expo-location';
 import { defaultProfile, mockUVData, UserProfile } from '../data/mockData';
 import { saveTodayExposure } from '../services/historyService';
 
@@ -43,6 +44,12 @@ interface AppContextType {
   currentUV:    number;
   setCurrentUV: (v: number) => void;
 
+  // Location
+  location:              Location.LocationObjectCoords | null;
+  setLocation:           (coords: Location.LocationObjectCoords | null) => void;
+  locationPermission:    'granted' | 'denied' | 'undetermined';
+  setLocationPermission: (status: 'granted' | 'denied' | 'undetermined') => void;
+
   // Settings
   notifyReapply:    boolean;
   setNotifyReapply: (v: boolean) => void;
@@ -74,66 +81,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       1: 12, 2: 24, 3: 32, 4: 48, 5: 72, 6: 120,
     };
     const base = baseMinutes[skinType] ?? 24;
-    const spfMultiplier = spf > 0 ? Math.min(spf / 10 + 1, 4) : 1;
+    const spfMultiplier = spf > 0 ? Math.min(spf / 15, 4) : 1;
     return Math.round(base * spfMultiplier) * 60;
   };
 
-  const initialSeconds = calcTotalSeconds(profile.skinType, profile.defaultSpf);
+  const total = calcTotalSeconds(profile.skinType, profile.defaultSpf);
   const [timer, setTimer] = useState<TimerState>({
-    totalSeconds: initialSeconds,
-    secondsLeft:  initialSeconds,
+    totalSeconds: total,
+    secondsLeft:  total,
     isRunning:    false,
     isPaused:     false,
   });
 
-  const intervalRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Track elapsed seconds so we can persist on reset without needing timer state closure
-  const elapsedRef     = useRef<number>(0);
-  const currentUVRef   = useRef<number>(currentUV);
-  const budgetRef      = useRef<number>(0.65);
+  const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef   = useRef(0);
+  const budgetRef    = useRef(0.65);
+  const uvRef        = useRef(mockUVData.uv);
 
-  // Keep refs in sync
-  useEffect(() => { currentUVRef.current = currentUV; }, [currentUV]);
-
-  useEffect(() => {
-    if (timer.isRunning && !timer.isPaused) {
-      intervalRef.current = setInterval(() => {
-        setTimer(prev => {
-          elapsedRef.current = prev.totalSeconds - prev.secondsLeft + 1;
-          if (prev.secondsLeft <= 0) {
-            clearInterval(intervalRef.current!);
-            return { ...prev, isRunning: false, secondsLeft: 0 };
-          }
-          return { ...prev, secondsLeft: prev.secondsLeft - 1 };
-        });
-      }, 1000);
-    } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    }
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [timer.isRunning, timer.isPaused]);
+  useEffect(() => { uvRef.current = currentUV; }, [currentUV]);
 
   const startTimer = useCallback(() => {
-    elapsedRef.current = 0;
-    setTimer(prev => ({ ...prev, isRunning: true, isPaused: false }));
+    if (intervalRef.current) return;
+    setTimer(t => ({ ...t, isRunning: true, isPaused: false }));
+    intervalRef.current = setInterval(() => {
+      elapsedRef.current += 1;
+      setTimer(t => {
+        if (t.secondsLeft <= 1) {
+          clearInterval(intervalRef.current!);
+          intervalRef.current = null;
+          return { ...t, secondsLeft: 0, isRunning: false };
+        }
+        return { ...t, secondsLeft: t.secondsLeft - 1 };
+      });
+    }, 1000);
   }, []);
 
   const pauseTimer = useCallback(() => {
-    setTimer(prev => ({ ...prev, isPaused: !prev.isPaused }));
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setTimer(t => ({ ...t, isRunning: false, isPaused: true }));
   }, []);
 
   const resetTimer = useCallback(() => {
-    const total   = calcTotalSeconds(profile.skinType, profile.defaultSpf);
-    const minutes = Math.round(elapsedRef.current / 60);
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
 
-    // Persist session to history if any time was recorded
-    if (minutes > 0) {
+    if (elapsedRef.current > 0) {
       saveTodayExposure({
-        minutes,
-        peakUV:    currentUVRef.current,
-        spfUsed:   profile.defaultSpf > 0 ? profile.defaultSpf : null,
+        minutes: Math.round(elapsedRef.current / 60),
+        peakUV: uvRef.current,
+        spfUsed: profile.defaultSpf ?? null,
         budgetPct: budgetRef.current,
       });
     }
@@ -150,6 +151,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     _setBudgetUsedPct(v);
   }, []);
 
+  // ── Location ──────────────────────────────────────────────────────────
+  const [location,           setLocation]           = useState<Location.LocationObjectCoords | null>(null);
+  const [locationPermission, setLocationPermission] = useState<'granted' | 'denied' | 'undetermined'>('undetermined');
+
+  // ── Settings ──────────────────────────────────────────────────────────
   const [notifyReapply, setNotifyReapply] = useState(true);
   const [notifyExtreme, setNotifyExtreme] = useState(true);
   const [gpsEnabled,    setGpsEnabled]    = useState(true);
@@ -164,6 +170,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         timer,                 startTimer, pauseTimer, resetTimer,
         budgetUsedPct,         setBudgetUsedPct,
         currentUV,             setCurrentUV,
+        location,              setLocation,
+        locationPermission,    setLocationPermission,
         notifyReapply,         setNotifyReapply,
         notifyExtreme,         setNotifyExtreme,
         gpsEnabled,            setGpsEnabled,

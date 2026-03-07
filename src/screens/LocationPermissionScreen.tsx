@@ -1,8 +1,10 @@
 // src/screens/LocationPermissionScreen.tsx
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import * as Location from 'expo-location';
 import { Colors, FontSizes, FontWeights, Spacing, Radii } from '../theme';
 import { Button, ScreenWrapper } from '../components';
+import { useAppState } from '../state/AppState';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 interface Props { navigation: NativeStackNavigationProp<any> }
@@ -10,7 +12,35 @@ interface Props { navigation: NativeStackNavigationProp<any> }
 const benefits = ['Accurate UV index', 'Personalized sun exposure limits', 'Local solar conditions'];
 
 export function LocationPermissionScreen({ navigation }: Props) {
-  const goHome = () => navigation.replace('MainTabs');
+  const { setLocation, setLocationPermission } = useAppState();
+  const [loading, setLoading] = useState(false);
+
+  const handleAllow = async () => {
+    setLoading(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status === 'granted') {
+        setLocationPermission('granted');
+        const result = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setLocation(result.coords); // { latitude, longitude, altitude, ... } in global state
+      } else {
+        setLocationPermission('denied');
+      }
+    } catch (_e) {
+      setLocationPermission('denied');
+    } finally {
+      setLoading(false);
+      navigation.replace('MainTabs');
+    }
+  };
+
+  const handleManual = () => {
+    setLocationPermission('denied');
+    navigation.replace('MainTabs');
+  };
 
   return (
     <ScreenWrapper>
@@ -42,8 +72,19 @@ export function LocationPermissionScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.buttons}>
-          <Button label="Allow Location Access" onPress={goHome} />
-          <Button label="Enter location manually" variant="ghost" onPress={goHome} style={{ marginTop: Spacing.sm }} />
+          {loading ? (
+            <ActivityIndicator color={Colors.teal} size="large" style={{ marginVertical: Spacing.md }} />
+          ) : (
+            <>
+              <Button label="Allow Location Access" onPress={handleAllow} />
+              <Button
+                label="Enter location manually"
+                variant="ghost"
+                onPress={handleManual}
+                style={{ marginTop: Spacing.sm }}
+              />
+            </>
+          )}
         </View>
       </View>
     </ScreenWrapper>
@@ -63,5 +104,5 @@ const styles = StyleSheet.create({
   benefitRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, padding: Spacing.md, backgroundColor: Colors.navyCard, borderRadius: Radii.lg, borderWidth: 1, borderColor: Colors.border },
   checkmark: { color: Colors.teal },
   benefitText: { fontSize: FontSizes.sm, color: Colors.textPrimary },
-  buttons: { width: '100%' },
+  buttons: { width: '100%', alignItems: 'center' },
 });
