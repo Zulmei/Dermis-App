@@ -1,18 +1,53 @@
 // src/screens/HistoryScreen.tsx
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Colors, FontSizes, FontWeights, Spacing, Radii } from '../theme';
 import { Card, ProgressBar, ScreenWrapper } from '../components';
-import { mockExposureHistory, mockWeeklyData, weekDayLabels } from '../data/mockData';
+import { mockExposureHistory, mockWeeklyData, weekDayLabels, DailyExposure } from '../data/mockData';
+import { loadHistory, loadWeeklyChartData } from '../services/historyService';
 import { uvColor } from '../theme/tokens';
 
 export function HistoryScreen() {
   const CHART_HEIGHT = 60;
 
+  const [history, setHistory]       = useState<DailyExposure[]>(mockExposureHistory);
+  const [weeklyData, setWeeklyData] = useState<number[]>(mockWeeklyData);
+  const [labels, setLabels]         = useState<string[]>(weekDayLabels);
+  const [loading, setLoading]       = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [hist, weekly] = await Promise.all([
+        loadHistory(),
+        loadWeeklyChartData(),
+      ]);
+      setHistory(hist);
+      setWeeklyData(weekly.weeklyData);
+      setLabels(weekly.labels);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Derive stats from live history
+  const daysWithExposure = history.filter(d => d.exposureMinutes > 0);
+  const avgDaily = daysWithExposure.length > 0
+    ? Math.round(daysWithExposure.reduce((s, d) => s + d.exposureMinutes, 0) / daysWithExposure.length)
+    : 0;
+  const peakUV = history.length > 0
+    ? Math.max(...history.map(d => d.peakUV)).toFixed(1)
+    : '—';
+  const daysProtected = history.filter(d => d.spfUsed !== null && d.spfUsed > 0).length;
+  const totalDays = history.length;
+
   return (
     <ScreenWrapper>
       <View style={styles.header}>
         <Text style={styles.title}>Exposure History</Text>
+        {loading && <ActivityIndicator size="small" color={Colors.teal} />}
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -20,7 +55,7 @@ export function HistoryScreen() {
         <Card>
           <Text style={styles.sectionLabel}>THIS WEEK</Text>
           <View style={[styles.weekChart, { height: CHART_HEIGHT + 24 }]}>
-            {mockWeeklyData.map((v, i) => {
+            {weeklyData.map((v, i) => {
               const barH = v * CHART_HEIGHT;
               const col = v > 0.6 ? Colors.orange : v > 0.3 ? Colors.amber : Colors.teal;
               return (
@@ -28,7 +63,7 @@ export function HistoryScreen() {
                   <View style={styles.weekBarWrapper}>
                     {v > 0 && <View style={[styles.weekBar, { height: barH, backgroundColor: col, opacity: 0.8 }]} />}
                   </View>
-                  <Text style={styles.weekDayLabel}>{weekDayLabels[i]}</Text>
+                  <Text style={styles.weekDayLabel}>{labels[i]}</Text>
                 </View>
               );
             })}
@@ -38,9 +73,9 @@ export function HistoryScreen() {
         {/* Stats row */}
         <View style={styles.statsRow}>
           {[
-            { label: 'Avg Daily',      value: '22 min' },
-            { label: 'Peak UV',        value: '8.7' },
-            { label: 'Days Protected', value: '5/7' },
+            { label: 'Avg Daily',      value: `${avgDaily} min` },
+            { label: 'Peak UV',        value: String(peakUV) },
+            { label: 'Days Protected', value: `${daysProtected}/${totalDays}` },
           ].map(stat => (
             <View key={stat.label} style={styles.statCard}>
               <Text style={styles.statValue}>{stat.value}</Text>
@@ -52,13 +87,18 @@ export function HistoryScreen() {
         {/* Daily log */}
         <Card>
           <Text style={styles.sectionLabel}>DAILY LOG</Text>
-          {mockExposureHistory.map((day, i) => (
-            <View key={day.date} style={[styles.dayRow, i < mockExposureHistory.length - 1 && styles.dayRowBorder]}>
+          {history.map((day, i) => (
+            <View key={day.isoDate} style={[styles.dayRow, i < history.length - 1 && styles.dayRowBorder]}>
               <View style={styles.dayHeader}>
                 <Text style={styles.dayDate}>{day.date}</Text>
                 <Text style={[styles.dayUV, { color: uvColor(day.peakUV) }]}>UV {day.peakUV.toFixed(1)}</Text>
               </View>
-              <ProgressBar pct={day.budgetPct} solidColor={day.budgetPct > 0.6 ? Colors.orange : Colors.teal} height={4} style={{ marginBottom: Spacing.sm }} />
+              <ProgressBar
+                pct={day.budgetPct}
+                solidColor={day.budgetPct > 0.6 ? Colors.orange : Colors.teal}
+                height={4}
+                style={{ marginBottom: Spacing.sm }}
+              />
               <View style={styles.dayMeta}>
                 <Text style={styles.dayMetaText}>⏱ {day.exposureMinutes} min</Text>
                 <Text style={styles.dayMetaText}>🧴 SPF {day.spfUsed ?? '—'}</Text>
@@ -72,7 +112,7 @@ export function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { padding: Spacing.xl, paddingBottom: Spacing.sm },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.xl, paddingBottom: Spacing.sm },
   title: { fontSize: FontSizes.xl2, fontWeight: FontWeights.bold, color: Colors.textPrimary },
   content: { padding: Spacing.lg, gap: Spacing.lg, paddingBottom: Spacing.xl4 },
   sectionLabel: { fontSize: FontSizes.xs, color: Colors.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: Spacing.md },

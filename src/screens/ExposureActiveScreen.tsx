@@ -1,12 +1,13 @@
 // src/screens/ExposureActiveScreen.tsx
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontSizes, FontWeights, Spacing, Radii } from '../theme';
 import { CircularTimer, ScreenWrapper } from '../components';
 import { Button } from '../components';
 import { useAppState } from '../state/AppState';
-import { mockUVData } from '../data/mockData';
+import { mockUVData, mockLocation, UVData } from '../data/mockData';
+import { fetchCurrentUV } from '../services/uvService';
 import { uvColor, uvLabel } from '../theme/tokens';
 import { formatTimer, spfLabel } from '../utils/format';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -15,7 +16,17 @@ interface Props { navigation: NativeStackNavigationProp<any> }
 
 export function ExposureActiveScreen({ navigation }: Props) {
   const { timer, pauseTimer, resetTimer, profile } = useAppState();
-  const uv = mockUVData.uv;
+
+  const [uvData, setUvData] = useState<UVData>(mockUVData);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchCurrentUV(mockLocation.lat, mockLocation.lon, mockLocation.altitude)
+      .then(data => { if (!cancelled) setUvData(data); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const uv  = uvData.uv;
   const col = uvColor(uv);
   const pct = timer.secondsLeft / timer.totalSeconds;
 
@@ -35,7 +46,7 @@ export function ExposureActiveScreen({ navigation }: Props) {
             <Text style={[styles.uvNowValue, { color: col }]}>{uv.toFixed(1)}</Text>
           </View>
 
-          <View style={[styles.activeBadge]}>
+          <View style={styles.activeBadge}>
             <Text style={styles.activeDot}>●</Text>
             <Text style={styles.activeBadgeText}> ACTIVE</Text>
           </View>
@@ -75,12 +86,12 @@ export function ExposureActiveScreen({ navigation }: Props) {
               onPress={pauseTimer}
               style={{ flex: 1 }}
             />
-            <TouchableOpacity
-              style={styles.endBtn}
-              onPress={() => { resetTimer(); navigation.goBack(); }}
-            >
-              <Text style={styles.endBtnText}>✕  End</Text>
-            </TouchableOpacity>
+            <Button
+              label="✕  End"
+              variant="ghost"
+              onPress={() => { resetTimer(); navigation.navigate('Home'); }}
+              style={{ flex: 1 }}
+            />
           </View>
         </View>
       </View>
@@ -90,20 +101,18 @@ export function ExposureActiveScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.navy },
-  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xl },
+  statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xl2 },
   uvNow: { alignItems: 'center' },
-  uvNowLabel: { fontSize: 11, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  uvNowValue: { fontSize: FontSizes.xl4, fontWeight: FontWeights.bold, fontFamily: 'monospace' },
-  activeBadge: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: `${Colors.green}20`, borderWidth: 1, borderColor: `${Colors.green}50` },
-  activeDot: { color: Colors.green, fontSize: FontSizes.sm },
-  activeBadgeText: { color: Colors.green, fontSize: FontSizes.sm, fontWeight: FontWeights.semibold },
+  uvNowLabel: { fontSize: FontSizes.xs, color: Colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
+  uvNowValue: { fontSize: FontSizes.xl3, fontWeight: FontWeights.bold },
+  activeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: `${Colors.teal}20`, borderRadius: Radii.full, paddingHorizontal: Spacing.md, paddingVertical: Spacing.xs },
+  activeDot: { fontSize: 8, color: Colors.teal },
+  activeBadgeText: { fontSize: FontSizes.xs, color: Colors.teal, fontWeight: FontWeights.semibold, letterSpacing: 1 },
   riskBadge: { alignItems: 'center' },
-  riskLabel: { fontSize: 11, color: Colors.textMuted },
-  riskValue: { fontSize: FontSizes.sm, fontWeight: FontWeights.semibold },
+  riskLabel: { fontSize: FontSizes.xs, color: Colors.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
+  riskValue: { fontSize: FontSizes.base, fontWeight: FontWeights.bold },
   timerSection: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.lg },
-  timerSub: { fontSize: FontSizes.sm, color: Colors.textMuted },
+  timerSub: { fontSize: FontSizes.sm, color: Colors.textMuted, textAlign: 'center' },
   controls: { gap: Spacing.md },
   controlRow: { flexDirection: 'row', gap: Spacing.md },
-  endBtn: { flex: 1, paddingVertical: 16, borderRadius: Radii.xl3, backgroundColor: Colors.transparent, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
-  endBtnText: { fontSize: FontSizes.base, fontWeight: FontWeights.semibold, color: Colors.textMuted },
 });

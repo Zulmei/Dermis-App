@@ -8,6 +8,7 @@ import React, {
   useCallback,
 } from 'react';
 import { defaultProfile, mockUVData, UserProfile } from '../data/mockData';
+import { saveTodayExposure } from '../services/historyService';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 interface TimerState {
@@ -38,6 +39,10 @@ interface AppContextType {
   budgetUsedPct:    number;
   setBudgetUsedPct: (v: number) => void;
 
+  // Live UV (set by screens that fetch it, consumed by AppState for history)
+  currentUV:    number;
+  setCurrentUV: (v: number) => void;
+
   // Settings
   notifyReapply:    boolean;
   setNotifyReapply: (v: boolean) => void;
@@ -54,13 +59,14 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   // ── Auth / onboarding state ───────────────────────────────────────────
-  // In production these would be hydrated from SecureStore / AsyncStorage.
-  // Default false so new installs always go through auth → onboarding.
-  const [isAuthenticated,       setIsAuthenticated]    = useState(false);
-  const [onboardingComplete,    setOnboardingComplete] = useState(false);
+  const [isAuthenticated,    setIsAuthenticated]    = useState(false);
+  const [onboardingComplete, setOnboardingComplete] = useState(false);
 
   // ── Profile ───────────────────────────────────────────────────────────
   const [profile, setProfile] = useState<UserProfile>(defaultProfile);
+
+  // ── Live UV (shared so AppState can persist it with history) ──────────
+  const [currentUV, setCurrentUV] = useState<number>(mockUVData.uv);
 
   // ── Timer ─────────────────────────────────────────────────────────────
   const calcTotalSeconds = (skinType: number, spf: number) => {
@@ -80,12 +86,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isPaused:     false,
   });
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const intervalRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Track elapsed seconds so we can persist on reset without needing timer state closure
+  const elapsedRef     = useRef<number>(0);
+  const currentUVRef   = useRef<number>(currentUV);
+  const budgetRef      = useRef<number>(0.65);
+
+  // Keep refs in sync
+  useEffect(() => { currentUVRef.current = currentUV; }, [currentUV]);
 
   useEffect(() => {
     if (timer.isRunning && !timer.isPaused) {
       intervalRef.current = setInterval(() => {
         setTimer(prev => {
+          elapsedRef.current = prev.totalSeconds - prev.secondsLeft + 1;
           if (prev.secondsLeft <= 0) {
             clearInterval(intervalRef.current!);
             return { ...prev, isRunning: false, secondsLeft: 0 };
@@ -102,6 +116,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [timer.isRunning, timer.isPaused]);
 
   const startTimer = useCallback(() => {
+    elapsedRef.current = 0;
     setTimer(prev => ({ ...prev, isRunning: true, isPaused: false }));
   }, []);
 
@@ -110,12 +125,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetTimer = useCallback(() => {
-    const total = calcTotalSeconds(profile.skinType, profile.defaultSpf);
+    const total   = calcTotalSeconds(profile.skinType, profile.defaultSpf);
+    const minutes = Math.round(elapsedRef.current / 60);
+
+    // Persist session to history if any time was recorded
+    if (minutes > 0) {
+      saveTodayExposure({
+        minutes,
+        peakUV:    currentUVRef.current,
+        spfUsed:   profile.defaultSpf > 0 ? profile.defaultSpf : null,
+        budgetPct: budgetRef.current,
+      });
+    }
+
+    elapsedRef.current = 0;
     setTimer({ totalSeconds: total, secondsLeft: total, isRunning: false, isPaused: false });
   }, [profile]);
 
   // ── Misc state ────────────────────────────────────────────────────────
-  const [budgetUsedPct, setBudgetUsedPct] = useState(0.65);
+  const [budgetUsedPct, _setBudgetUsedPct] = useState(0.65);
+
+  const setBudgetUsedPct = useCallback((v: number) => {
+    budgetRef.current = v;
+    _setBudgetUsedPct(v);
+  }, []);
 
   const [notifyReapply, setNotifyReapply] = useState(true);
   const [notifyExtreme, setNotifyExtreme] = useState(true);
@@ -130,6 +163,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         profile,               setProfile,
         timer,                 startTimer, pauseTimer, resetTimer,
         budgetUsedPct,         setBudgetUsedPct,
+        currentUV,             setCurrentUV,
         notifyReapply,         setNotifyReapply,
         notifyExtreme,         setNotifyExtreme,
         gpsEnabled,            setGpsEnabled,
