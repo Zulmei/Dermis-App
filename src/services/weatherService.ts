@@ -3,7 +3,7 @@
 // Weather data service — wraps the OpenWeatherMap Current Weather 2.5 API.
 // Docs: https://openweathermap.org/current
 //
-// Required env vars (add to .env / app.config.js extra.env):
+// Required env vars (add to .env):
 //   EXPO_PUBLIC_OPENWEATHER_API_KEY=your_key_here
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -11,15 +11,15 @@ import { WeatherData, mockWeatherData } from '../data/mockData';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const OWM_BASE = 'https://api.openweathermap.org/data/2.5/weather';
-const API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY ?? '';
+const API_KEY  = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY ?? '';
 
 const USE_MOCK = !API_KEY || API_KEY === 'your_key_here';
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 /**
- * Map an OpenWeatherMap 2.5/weather response to our WeatherData shape.
- * Unlike One Call 3.0, the fields are at the top level (no `current` wrapper).
+ * Map a 2.5/weather response to our WeatherData shape.
+ * Unlike One Call 3.0, fields are at the top level (no `current` wrapper).
  */
 function parseWeatherResponse(json: any): WeatherData {
   return {
@@ -29,7 +29,7 @@ function parseWeatherResponse(json: any): WeatherData {
     cloud_coverage: json.clouds?.all ?? 0,
     wind_speed:     json.wind?.speed ?? 0,
     description:    json.weather?.[0]?.description ?? 'Unknown',
-    uvi:            0,           // not available in 2.5/weather; UV comes from uvService
+    uvi:            0,           // not in 2.5/weather; UV index comes from uvService
     sunrise:        json.sys?.sunrise ?? 0,
     sunset:         json.sys?.sunset ?? 0,
   };
@@ -39,7 +39,7 @@ function parseWeatherResponse(json: any): WeatherData {
 
 /**
  * Fetch current weather conditions for a lat/lon coordinate.
- * Units default to metric (°C, m/s); pass `units: 'imperial'` for °F.
+ * `units` is forwarded from AppState (metric = °C / m/s, imperial = °F / mph).
  * Falls back to mock data when no API key is configured or on network error.
  */
 export async function fetchCurrentWeather(
@@ -54,13 +54,10 @@ export async function fetchCurrentWeather(
 
   try {
     const url = `${OWM_BASE}?lat=${lat}&lon=${lon}&units=${units}&appid=${API_KEY}`;
-
     const res = await fetch(url);
 
     if (!res.ok) {
-      console.warn(
-        `[weatherService] fetchCurrentWeather HTTP ${res.status} — falling back to mock.`,
-      );
+      console.warn(`[weatherService] fetchCurrentWeather HTTP ${res.status} — falling back to mock.`);
       return mockWeatherData;
     }
 
@@ -68,6 +65,6 @@ export async function fetchCurrentWeather(
     return parseWeatherResponse(json);
   } catch (err) {
     console.error('[weatherService] fetchCurrentWeather error:', err);
-    return mockWeatherData; // graceful degradation
+    return mockWeatherData;
   }
 }
