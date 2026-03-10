@@ -1,7 +1,7 @@
 // src/services/weatherService.ts
 // ─────────────────────────────────────────────────────────────────────────────
-// Weather data service — wraps the OpenWeatherMap One Call 3.0 API.
-// Docs: https://openweathermap.org/api/one-call-3
+// Weather data service — wraps the OpenWeatherMap Current Weather 2.5 API.
+// Docs: https://openweathermap.org/current
 //
 // Required env vars (add to .env / app.config.js extra.env):
 //   EXPO_PUBLIC_OPENWEATHER_API_KEY=your_key_here
@@ -10,7 +10,7 @@
 import { WeatherData, mockWeatherData } from '../data/mockData';
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const OWM_BASE = 'https://api.openweathermap.org/data/3.0/onecall';
+const OWM_BASE = 'https://api.openweathermap.org/data/2.5/weather';
 const API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY ?? '';
 
 const USE_MOCK = !API_KEY || API_KEY === 'your_key_here';
@@ -18,21 +18,20 @@ const USE_MOCK = !API_KEY || API_KEY === 'your_key_here';
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 /**
- * Map an OpenWeatherMap One Call `current` block to our WeatherData shape.
- * The OWM `current` object already closely mirrors our type.
+ * Map an OpenWeatherMap 2.5/weather response to our WeatherData shape.
+ * Unlike One Call 3.0, the fields are at the top level (no `current` wrapper).
  */
 function parseWeatherResponse(json: any): WeatherData {
-  const c = json.current;
   return {
-    temp:           c.temp,
-    feels_like:     c.feels_like,
-    humidity:       c.humidity,
-    cloud_coverage: c.clouds,          // OWM field is `clouds` (%)
-    wind_speed:     c.wind_speed,
-    description:    c.weather?.[0]?.description ?? 'Unknown',
-    uvi:            c.uvi,
-    sunrise:        c.sunrise,         // Unix timestamp
-    sunset:         c.sunset,
+    temp:           json.main.temp,
+    feels_like:     json.main.feels_like,
+    humidity:       json.main.humidity,
+    cloud_coverage: json.clouds?.all ?? 0,
+    wind_speed:     json.wind?.speed ?? 0,
+    description:    json.weather?.[0]?.description ?? 'Unknown',
+    uvi:            0,           // not available in 2.5/weather; UV comes from uvService
+    sunrise:        json.sys?.sunrise ?? 0,
+    sunset:         json.sys?.sunset ?? 0,
   };
 }
 
@@ -54,10 +53,7 @@ export async function fetchCurrentWeather(
   }
 
   try {
-    const url =
-      `${OWM_BASE}?lat=${lat}&lon=${lon}` +
-      `&units=${units}&exclude=minutely,hourly,daily,alerts` +
-      `&appid=${API_KEY}`;
+    const url = `${OWM_BASE}?lat=${lat}&lon=${lon}&units=${units}&appid=${API_KEY}`;
 
     const res = await fetch(url);
 
