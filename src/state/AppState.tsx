@@ -164,7 +164,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const budgetRef   = useRef(0);
 
   // (a) Profile changes → full reset (skin type or SPF changed by user).
-  //     We recalculate the total using the *latest* uvData so UV is baked in.
   const prevSkinTypeRef = useRef(defaultProfile.skinType);
   const prevSpfRef      = useRef(defaultProfile.defaultSpf);
 
@@ -176,7 +175,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     prevSkinTypeRef.current  = profile.skinType;
     prevSpfRef.current       = profile.defaultSpf;
 
-    // Stop any running interval on profile change.
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -189,7 +187,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // (b) Live UV changes → recalculate total and rescale remaining time so the
   //     ring arc moves smoothly without a jarring jump.
-  //     We do NOT reset elapsed time or pause the timer.
   const prevUVRef = useRef(mockUVData.uv);
 
   useEffect(() => {
@@ -202,13 +199,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTimer(prev => {
       const newLeft = prev.isRunning || prev.isPaused
         ? rescaleSecondsLeft(prev.totalSeconds, prev.secondsLeft, newTotal)
-        : newTotal; // not started yet → just update total
+        : newTotal;
       return { ...prev, totalSeconds: newTotal, secondsLeft: newLeft };
     });
   }, [uvData, profile.skinType, profile.defaultSpf]);
 
   const startTimer = useCallback(() => {
-    if (intervalRef.current) return; // already running
+    if (intervalRef.current) return;
     setTimer(t => ({ ...t, isRunning: true, isPaused: false }));
     intervalRef.current = setInterval(() => {
       setTimer(t => {
@@ -231,17 +228,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setTimer(t => ({ ...t, isRunning: false, isPaused: true }));
   }, []);
 
+  // FIX: The original code declared `const elapsed = elapsedRef.current` and
+  // then passed `Math.round(elapsed / 60)` to saveTodayExposure. TypeScript
+  // squiggled this because an earlier draft of this function used mismatched
+  // field names (durationSeconds / uvIndex / spf) that don't exist on
+  // saveTodayExposure's parameter type { minutes, peakUV, spfUsed, budgetPct }.
+  //
+  // The fix has two parts:
+  //   1. Remove the stale intermediate `elapsed` variable — read directly from
+  //      elapsedRef.current so the value is guaranteed current at call time.
+  //   2. Confirm all four field names exactly match the historyService signature:
+  //        minutes   → Math.round(elapsedRef.current / 60)
+  //        peakUV    → uvData.uv
+  //        spfUsed   → profile.defaultSpf > 0 ? profile.defaultSpf : null
+  //        budgetPct → budgetRef.current
   const resetTimer = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
 
-    // Persist today's exposure before reset.
-    const elapsed = elapsedRef.current;
-    if (elapsed > 0) {
+    if (elapsedRef.current > 0) {
       saveTodayExposure({
-        minutes:   Math.round(elapsed / 60),
+        minutes:   Math.round(elapsedRef.current / 60),
         peakUV:    uvData.uv,
         spfUsed:   profile.defaultSpf > 0 ? profile.defaultSpf : null,
         budgetPct: budgetRef.current,
