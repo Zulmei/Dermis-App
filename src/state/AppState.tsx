@@ -12,6 +12,7 @@ import { defaultProfile, mockUVData, mockWeatherData, UserProfile, UVData, Weath
 import { saveTodayExposure } from '../services/historyService';
 import { fetchCurrentUV } from '../services/uvService';
 import { fetchCurrentWeather } from '../services/weatherService';
+import { calcSafeExposureSeconds, rescaleSecondsLeft } from '../utils/timerCalc';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -106,11 +107,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [metricUnits,   setMetricUnits]   = useState(false);
 
   // ── Live data fetch ───────────────────────────────────────────────────
-  /**
-   * Fetches UV + weather in parallel using the current location coords.
-   * Called automatically when `location` changes from null → coords,
-   * and can be called manually via `refreshLiveData()`.
-   */
   const fetchLiveData = useCallback(async (coords: Location.LocationObjectCoords) => {
     setLiveDataStatus('loading');
     setLiveDataError(null);
@@ -132,18 +128,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.error('[AppState] fetchLiveData error:', msg);
       setLiveDataError(msg);
       setLiveDataStatus('error');
-      // uvData and weatherData retain their last good values (mock or prior fetch)
     }
   }, [metricUnits]);
 
-  /** Auto-fetch whenever location is first set (or changes). */
   useEffect(() => {
     if (location) {
       fetchLiveData(location);
     }
-  }, [location]); // intentionally excludes fetchLiveData to avoid refetch on metricUnits change
+  }, [location]);
 
-  /** Public handle so screens can trigger a manual refresh. */
   const refreshLiveData = useCallback(() => {
     if (location) {
       fetchLiveData(location);
@@ -151,32 +144,71 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [location, fetchLiveData]);
 
   // ── Timer ─────────────────────────────────────────────────────────────
-  const calcTotalSeconds = (skinType: number, spf: number) => {
-    const baseMinutes: Record<number, number> = {
-      1: 12, 2: 24, 3: 32, 4: 48, 5: 72, 6: 120,
-    };
-    const base = baseMinutes[skinType] ?? 24;
-    const spfMultiplier = spf > 0 ? Math.min(spf / 15, 4) : 1;
-    return Math.round(base * spfMultiplier) * 60;
-  };
+  //
+  // Timer is initialised from profile + mock UV data.
+  // It reactively recalculates when:
+  //   (a) profile.skinType or profile.defaultSpf changes  → full reset
+  //   (b) uvData changes (live UV arrives)               → rescale to preserve progress
 
   const [timer, setTimer] = useState<TimerState>(() => {
-    const total = calcTotalSeconds(profile.skinType, profile.defaultSpf);
+    const total = calcSafeExposureSeconds(
+      defaultProfile.skinType,
+      defaultProfile.defaultSpf,
+      mockUVData,
+    );
     return { totalSeconds: total, secondsLeft: total, isRunning: false, isPaused: false };
   });
 
-  const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const elapsedRef   = useRef(0);
-  const budgetRef    = useRef(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef  = useRef(0);
+  const budgetRef   = useRef(0);
 
-  // Keep timer total in sync with profile changes
+  // (a) Profile changes → full reset (skin type or SPF changed by user).
+  //     We recalculate the total using the *latest* uvData so UV is baked in.
+  const prevSkinTypeRef = useRef(defaultProfile.skinType);
+  const prevSpfRef      = useRef(defaultProfile.defaultSpf);
+
   useEffect(() => {
-    const total = calcTotalSeconds(profile.skinType, profile.defaultSpf);
-    setTimer(t => ({ ...t, totalSeconds: total, secondsLeft: total }));
-  }, [profile.skinType, profile.defaultSpf]);
+    const skinChanged = profile.skinType  !== prevSkinTypeRef.current;
+    const spfChanged  = profile.defaultSpf !== prevSpfRef.current;
+    if (!skinChanged && !spfChanged) return;
+
+    prevSkinTypeRef.current  = profile.skinType;
+    prevSpfRef.current       = profile.defaultSpf;
+
+    // Stop any running interval on profile change.
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    elapsedRef.current = 0;
+
+    const total = calcSafeExposureSeconds(profile.skinType, profile.defaultSpf, uvData);
+    setTimer({ totalSeconds: total, secondsLeft: total, isRunning: false, isPaused: false });
+  }, [profile.skinType, profile.defaultSpf, uvData]);
+
+  // (b) Live UV changes → recalculate total and rescale remaining time so the
+  //     ring arc moves smoothly without a jarring jump.
+  //     We do NOT reset elapsed time or pause the timer.
+  const prevUVRef = useRef(mockUVData.uv);
+
+  useEffect(() => {
+    const newUV = uvData.uv;
+    if (newUV === prevUVRef.current) return;
+    prevUVRef.current = newUV;
+
+    const newTotal = calcSafeExposureSeconds(profile.skinType, profile.defaultSpf, uvData);
+
+    setTimer(prev => {
+      const newLeft = prev.isRunning || prev.isPaused
+        ? rescaleSecondsLeft(prev.totalSeconds, prev.secondsLeft, newTotal)
+        : newTotal; // not started yet → just update total
+      return { ...prev, totalSeconds: newTotal, secondsLeft: newLeft };
+    });
+  }, [uvData, profile.skinType, profile.defaultSpf]);
 
   const startTimer = useCallback(() => {
-    if (intervalRef.current) return;
+    if (intervalRef.current) return; // already running
     setTimer(t => ({ ...t, isRunning: true, isPaused: false }));
     intervalRef.current = setInterval(() => {
       setTimer(t => {
@@ -205,21 +237,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       intervalRef.current = null;
     }
 
-    // Persist today's exposure before reset
+    // Persist today's exposure before reset.
     const elapsed = elapsedRef.current;
     if (elapsed > 0) {
       saveTodayExposure({
         minutes:   Math.round(elapsed / 60),
-        peakUV:    uvData.uv,              // use live UV value
-        spfUsed:   profile.defaultSpf ?? null,
+        peakUV:    uvData.uv,
+        spfUsed:   profile.defaultSpf > 0 ? profile.defaultSpf : null,
         budgetPct: budgetRef.current,
       });
     }
 
     elapsedRef.current = 0;
-    const total = calcTotalSeconds(profile.skinType, profile.defaultSpf);
+    const total = calcSafeExposureSeconds(profile.skinType, profile.defaultSpf, uvData);
     setTimer({ totalSeconds: total, secondsLeft: total, isRunning: false, isPaused: false });
-  }, [profile, uvData.uv]);
+  }, [profile, uvData]);
 
   // ── Misc state ────────────────────────────────────────────────────────
   const [budgetUsedPct, _setBudgetUsedPct] = useState(0.65);

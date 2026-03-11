@@ -278,7 +278,7 @@ export function HomeScreen({ navigation }: Props) {
           <ProgressBar
             pct={Math.min(budgetUsedPct, 1)}
             gradient={budgetUsedPct >= 1 ? undefined : ['#2DD4BF', '#F59E0B']}
-            color={budgetUsedPct >= 1 ? Colors.red : undefined}
+            solidColor={budgetUsedPct >= 1 ? Colors.red : undefined}
             height={8}
             style={{ marginBottom: Spacing.sm }}
           />
