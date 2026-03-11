@@ -3,12 +3,26 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Colors, FontSizes, FontWeights, Spacing, Radii } from '../theme';
 import { Button, Card, ProgressBar, ScreenWrapper } from '../components';
+import { useAppState } from '../state/AppState';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 interface Props { navigation: NativeStackNavigationProp<any> }
 
 export function SunscreenAlertScreen({ navigation }: Props) {
-  const handleReapply = () => navigation.goBack();
+  const { resetTimer, startTimer } = useAppState();
+
+  const handleReapply = () => {
+    // Reset the countdown back to the full calculated duration, then
+    // immediately start it running again before returning to ExposureActive.
+    resetTimer();
+    startTimer();
+    navigation.goBack();
+  };
+
+  const handleDismiss = () => {
+    // Just go back — timer keeps running wherever it was.
+    navigation.goBack();
+  };
 
   return (
     <ScreenWrapper>
@@ -36,7 +50,12 @@ export function SunscreenAlertScreen({ navigation }: Props) {
             variant="amberOrange"
             onPress={handleReapply}
           />
-          <Button label="Dismiss" variant="ghost" onPress={() => navigation.goBack()} style={{ marginTop: Spacing.sm }} />
+          <Button
+            label="Dismiss"
+            variant="ghost"
+            onPress={handleDismiss}
+            style={{ marginTop: Spacing.sm }}
+          />
         </View>
       </View>
     </ScreenWrapper>
@@ -44,14 +63,14 @@ export function SunscreenAlertScreen({ navigation }: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, padding: Spacing.xl3, alignItems: 'center', justifyContent: 'center', gap: Spacing.xl2 },
+  root:        { flex: 1, padding: Spacing.xl3, alignItems: 'center', justifyContent: 'center', gap: Spacing.xl2 },
   iconWrapper: { width: 100, height: 100, borderRadius: 50, backgroundColor: `${Colors.amber}20`, borderWidth: 2, borderColor: Colors.amber, alignItems: 'center', justifyContent: 'center' },
-  icon: { fontSize: 48 },
-  title: { fontSize: FontSizes.xl2, fontWeight: FontWeights.bold, color: Colors.textPrimary, textAlign: 'center' },
-  body: { fontSize: FontSizes.sm, color: Colors.textMuted, textAlign: 'center', lineHeight: 20, maxWidth: 280 },
-  spfCard: { width: '100%' },
-  spfHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
-  spfLabel: { fontSize: FontSizes.sm, color: Colors.textMuted },
-  spfPct: { fontSize: FontSizes.sm, fontWeight: FontWeights.semibold },
-  buttons: { width: '100%' },
+  icon:        { fontSize: 48 },
+  title:       { fontSize: FontSizes.xl2, fontWeight: FontWeights.bold, color: Colors.textPrimary, textAlign: 'center' },
+  body:        { fontSize: FontSizes.sm, color: Colors.textMuted, textAlign: 'center', lineHeight: 20, maxWidth: 280 },
+  spfCard:     { width: '100%' },
+  spfHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
+  spfLabel:    { fontSize: FontSizes.sm, color: Colors.textMuted },
+  spfPct:      { fontSize: FontSizes.sm, fontWeight: FontWeights.semibold },
+  buttons:     { width: '100%' },
 });
