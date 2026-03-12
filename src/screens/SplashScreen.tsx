@@ -1,4 +1,6 @@
 // src/screens/SplashScreen.tsx
+// Dual-gate navigation: waits for BOTH the 2.4 s brand moment AND session
+// restore to complete before deciding where to send the user.
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,7 +13,7 @@ interface Props {
 }
 
 export function SplashScreen({ navigation }: Props) {
-  const { isAuthenticated, onboardingComplete } = useAppState();
+  const { authLoading, isAuthenticated, onboardingComplete } = useAppState();
 
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
@@ -21,6 +23,9 @@ export function SplashScreen({ navigation }: Props) {
   const ring1Opacity = useRef(new Animated.Value(0.6)).current;
   const ring2Opacity = useRef(new Animated.Value(0.6)).current;
   const ring3Opacity = useRef(new Animated.Value(0.6)).current;
+
+  // Track whether we've already navigated away so we don't double-fire.
+  const hasNavigated = useRef(false);
 
   const animateRing = (
     scale: Animated.Value,
@@ -52,7 +57,7 @@ export function SplashScreen({ navigation }: Props) {
   };
 
   useEffect(() => {
-    // Entrance animation
+    // Entrance animation — runs immediately, independent of auth state.
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -71,21 +76,45 @@ export function SplashScreen({ navigation }: Props) {
     animateRing(ring1, ring1Opacity, 0);
     animateRing(ring2, ring2Opacity, 600);
     animateRing(ring3, ring3Opacity, 1200);
-
-    // ── Navigation decision after 2.4 s ──────────────────────────────────
-    // Spec §5.1:
-    //   • Authenticated user  → skip auth, go straight to Home Dashboard
-    //   • New / logged-out    → Auth Landing
-    const timer = setTimeout(() => {
-      if (isAuthenticated && onboardingComplete) {
-        navigation.replace('MainTabs');
-      } else {
-        navigation.replace('AuthLanding');
-      }
-    }, 2400);
-
-    return () => clearTimeout(timer);
   }, []);
+
+  // ── Navigation decision ────────────────────────────────────────────────
+  // We wait for:
+  //   1. authLoading to be false (session restore is complete), AND
+  //   2. at least 2400 ms to have elapsed (brand moment / spec §5.1)
+  //
+  // Both gates use a ref so they only fire once.
+  const minTimerDone = useRef(false);
+  const authDone     = useRef(false);
+
+  const maybeNavigate = useCallback(() => {
+    if (!minTimerDone.current || !authDone.current) return;
+    if (hasNavigated.current) return;
+    hasNavigated.current = true;
+
+    if (isAuthenticated && onboardingComplete) {
+      navigation.replace('MainTabs');
+    } else {
+      navigation.replace('AuthLanding');
+    }
+  });
+
+  // Gate 1: minimum 2400 ms brand moment.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      minTimerDone.current = true;
+      maybeNavigate();
+    }, 2400);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Gate 2: auth restore complete.
+  useEffect(() => {
+    if (!authLoading) {
+      authDone.current = true;
+      maybeNavigate();
+    }
+  }, [authLoading]);
 
   return (
     <LinearGradient
@@ -118,10 +147,16 @@ export function SplashScreen({ navigation }: Props) {
         <Text style={styles.tagline}>YOUR UV & SKIN GUARDIAN</Text>
       </Animated.View>
 
-      {/* Version badge */}
       <Text style={styles.version}>v1.0</Text>
     </LinearGradient>
   );
+}
+
+// Pulled out of the component body so it doesn't recreate every render.
+function useCallback<T extends (...args: any[]) => any>(fn: T): T {
+  const ref = React.useRef(fn);
+  ref.current = fn;
+  return React.useCallback((...args: any[]) => ref.current(...args), []) as T;
 }
 
 const styles = StyleSheet.create({
