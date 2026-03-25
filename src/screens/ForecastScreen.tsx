@@ -65,10 +65,10 @@ export function ForecastScreen() {
         {/* Hourly breakdown */}
         <Card>
           <Text style={styles.sectionLabel}>HOURLY BREAKDOWN</Text>
-          {hourlyUV.slice(0, 8).map((point, i) => {
+          {hourlyUV.map((point, i) => {
             const col = uvColor(point.uv);
             return (
-              <View key={i} style={[styles.hourRow, i < 7 && styles.hourRowBorder]}>
+              <View key={i} style={[styles.hourRow, i < hourlyUV.length - 1 && styles.hourRowBorder]}>
                 <Text style={styles.hourLabel}>{point.hour}</Text>
                 <View style={{ flex: 1, marginHorizontal: Spacing.md }}>
                   <ProgressBar pct={point.uv / 11} solidColor={col} height={6} />

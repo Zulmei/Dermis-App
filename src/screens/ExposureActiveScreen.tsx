@@ -22,9 +22,6 @@ export function ExposureActiveScreen({ navigation }: Props) {
   const pct = timer.totalSeconds > 0 ? timer.secondsLeft / timer.totalSeconds : 1;
 
   const handleBack = () => {
-    // Pause the timer so it doesn't burn down while the user is on Home,
-    // then navigate back without resetting anything.
-    if (timer.isRunning) pauseTimer();
     navigation.navigate('Home');
   };
 

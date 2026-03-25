@@ -47,8 +47,8 @@ export function CircularTimer({
           strokeDashoffset={dashOffset}
         />
       </Svg>
-      <View style={styles.center}>
-        <Text style={[styles.label, { color }]}>{label}</Text>
+      <View style={[styles.center, { maxWidth: r * 1.2 }]}>
+        <Text style={[styles.label, { color }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.5}>{label}</Text>
         {sublabel ? <Text style={styles.sublabel}>{sublabel}</Text> : null}
       </View>
     </View>
