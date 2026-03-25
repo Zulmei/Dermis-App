@@ -1,5 +1,5 @@
 // src/screens/OnboardingSkinScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, FontSizes, FontWeights, Spacing, Radii } from '../theme';
@@ -7,8 +7,12 @@ import { Button, ScreenWrapper } from '../components';
 import { useAppState } from '../state/AppState';
 import { skinTypeColor } from '../utils/format';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RouteProp } from '@react-navigation/native';
 
-interface Props { navigation: NativeStackNavigationProp<any> }
+interface Props {
+  navigation: NativeStackNavigationProp<any>;
+  route: RouteProp<any>;
+}
 
 const SKIN_TYPES = [
   { id: 1, label: 'Type I',   desc: 'Very fair skin, always burns' },
@@ -19,9 +23,15 @@ const SKIN_TYPES = [
   { id: 6, label: 'Type VI',  desc: 'Dark skin, almost never burns' },
 ];
 
-export function OnboardingSkinScreen({ navigation }: Props) {
+export function OnboardingSkinScreen({ navigation, route }: Props) {
   const { profile, setProfile } = useAppState();
   const [selected, setSelected] = useState<number>(profile.skinType);
+
+  // Auto-select type returned from the camera screen
+  useEffect(() => {
+    const detected = route.params?.detectedSkinType;
+    if (detected) setSelected(detected);
+  }, [route.params?.detectedSkinType]);
 
   const handleNext = () => {
     setProfile({ ...profile, skinType: selected });
@@ -40,6 +50,13 @@ export function OnboardingSkinScreen({ navigation }: Props) {
 
         <Text style={styles.header}>Select Your Skin Type</Text>
         <Text style={styles.description}>Dermis uses the Fitzpatrick scale to estimate UV sensitivity.</Text>
+
+        <Button
+          label="Use Camera to Detect  →"
+          variant="secondary"
+          onPress={() => navigation.navigate('SkinCamera')}
+          style={{ marginBottom: Spacing.xl }}
+        />
 
         <View style={styles.list}>
           {SKIN_TYPES.map(type => {

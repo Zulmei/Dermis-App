@@ -17,3 +17,4 @@ export { HistoryScreen }              from './HistoryScreen';
 export { ProfileScreen }              from './ProfileScreen';
 export { SettingsScreen }             from './SettingsScreen';
 export { PremiumScreen }              from './PremiumScreen';
+export { SkinCameraScreen }           from './SkinCameraScreen';

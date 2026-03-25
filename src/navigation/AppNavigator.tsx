@@ -27,6 +27,7 @@ import { HistoryScreen }               from '../screens/HistoryScreen';
 import { ProfileScreen }               from '../screens/ProfileScreen';
 import { SettingsScreen }              from '../screens/SettingsScreen';
 import { PremiumScreen }               from '../screens/PremiumScreen';
+import { SkinCameraScreen }            from '../screens/SkinCameraScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab   = createBottomTabNavigator();
@@ -149,6 +150,11 @@ function AuthStack() {
         name="LocationPermission"
         component={LocationPermissionScreen}
         options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="SkinCamera"
+        component={SkinCameraScreen}
+        options={{ headerShown: false, animation: 'slide_from_bottom' }}
       />
 
       {/* ── Main app ── */}
