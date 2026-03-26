@@ -6,4 +6,5 @@ export { Toggle }         from './Toggle';
 export { CircularTimer }  from './CircularTimer';
 export { UVBarChart }     from './UVBarChart';
 export { ProgressBar }    from './ProgressBar';
-export { ScreenWrapper }  from './ScreenWrapper';
+export { ScreenWrapper }        from './ScreenWrapper';
+export { ManualReminderModal }  from './ManualReminderModal';

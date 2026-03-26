@@ -131,7 +131,7 @@ export interface UserProfile {
   skinType: number;         // 1–6 Fitzpatrick
   defaultSpf: number;
   reapplyReminder: string;
-  waterExposure: boolean;
+  manualReminderMinutes?: number;
 }
 
 export const defaultProfile: UserProfile = {
@@ -139,8 +139,7 @@ export const defaultProfile: UserProfile = {
   email: 'jane@example.com',
   skinType: 2,
   defaultSpf: 30,
-  reapplyReminder: 'Every 2 hours',
-  waterExposure: false,
+  reapplyReminder: 'Based on UV Exposure',
 };
 
 // ── Location ──────────────────────────────────────────────────────────────

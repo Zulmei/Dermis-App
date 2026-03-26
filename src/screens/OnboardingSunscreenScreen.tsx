@@ -1,25 +1,43 @@
 // src/screens/OnboardingSunscreenScreen.tsx
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import { Colors, FontSizes, FontWeights, Spacing, Radii } from '../theme';
-import { Button, Toggle, ScreenWrapper } from '../components';
+import { Button, ScreenWrapper } from '../components';
 import { useAppState } from '../state/AppState';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 interface Props { navigation: NativeStackNavigationProp<any> }
 
 const SPF_OPTIONS = [0, 15, 30, 50, 70];
-const REMINDERS = ['Every 2 hours', 'Based on UV exposure', 'Manual reminders'];
+const REMINDERS = ['Based on UV Exposure', 'Every 2 hours', 'Manual reminders'];
+const MANUAL_PRESETS = [
+  { label: '30m',  value: 30  },
+  { label: '45m',  value: 45  },
+  { label: '1h',   value: 60  },
+  { label: '1.5h', value: 90  },
+  { label: '2h',   value: 120 },
+];
 
 export function OnboardingSunscreenScreen({ navigation }: Props) {
   const { profile, setProfile } = useAppState();
-  const [spf, setSpf] = useState(profile.defaultSpf);
-  const [reminder, setReminder] = useState(profile.reapplyReminder);
-  const [water, setWater] = useState(profile.waterExposure);
+  const [spf,          setSpf]          = useState(profile.defaultSpf);
+  const [reminder,     setReminder]     = useState(profile.reapplyReminder);
+  const [manualMinutes, setManualMinutes] = useState<number | null>(profile.manualReminderMinutes ?? null);
+  const [showCustom,   setShowCustom]   = useState(false);
+  const [customInput,  setCustomInput]  = useState('');
 
   const handleFinish = () => {
-    setProfile({ ...profile, defaultSpf: spf, reapplyReminder: reminder, waterExposure: water });
+    const updates: Parameters<typeof setProfile>[0] = { ...profile, defaultSpf: spf, reapplyReminder: reminder };
+    if (reminder === 'Manual reminders' && manualMinutes) {
+      updates.manualReminderMinutes = manualMinutes;
+    }
+    setProfile(updates);
     navigation.navigate('LocationPermission');
+  };
+
+  const adjustCustom = (delta: number) => {
+    const base = parseInt(customInput, 10) || 30;
+    setCustomInput(String(Math.min(480, Math.max(5, base + delta))));
   };
 
   return (
@@ -59,28 +77,75 @@ export function OnboardingSunscreenScreen({ navigation }: Props) {
             {REMINDERS.map(r => {
               const active = reminder === r;
               return (
-                <TouchableOpacity
-                  key={r}
-                  style={[styles.reminderRow, active && styles.reminderRowActive]}
-                  onPress={() => setReminder(r)}
-                >
-                  <View style={[styles.radio, active && styles.radioActive]}>
-                    {active && <View style={styles.radioDot} />}
-                  </View>
-                  <Text style={styles.reminderText}>{r}</Text>
-                </TouchableOpacity>
+                <View key={r}>
+                  <TouchableOpacity
+                    style={[styles.reminderRow, active && styles.reminderRowActive]}
+                    onPress={() => {
+                      setReminder(r);
+                      if (r !== 'Manual reminders') setShowCustom(false);
+                    }}
+                  >
+                    <View style={[styles.radio, active && styles.radioActive]}>
+                      {active && <View style={styles.radioDot} />}
+                    </View>
+                    <Text style={styles.reminderText}>{r}</Text>
+                  </TouchableOpacity>
+
+                  {active && r === 'Manual reminders' && (
+                    <View style={styles.manualExpanded}>
+                      {!showCustom ? (
+                        <View style={styles.manualChipRow}>
+                          {MANUAL_PRESETS.map(p => (
+                            <TouchableOpacity
+                              key={p.value}
+                              style={[styles.manualChip, manualMinutes === p.value && styles.manualChipActive]}
+                              onPress={() => setManualMinutes(p.value)}
+                            >
+                              <Text style={[styles.manualChipText, manualMinutes === p.value && styles.manualChipTextActive]}>
+                                {p.label}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                          <TouchableOpacity
+                            style={styles.manualChip}
+                            onPress={() => { setShowCustom(true); setManualMinutes(null); setCustomInput(''); }}
+                          >
+                            <Text style={styles.manualChipText}>Custom…</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <View style={styles.customRow}>
+                          <TouchableOpacity style={styles.adjBtn} onPress={() => adjustCustom(-5)}>
+                            <Text style={styles.adjText}>−</Text>
+                          </TouchableOpacity>
+                          <TextInput
+                            style={styles.customInput}
+                            value={customInput}
+                            onChangeText={t => {
+                              setCustomInput(t);
+                              const n = parseInt(t, 10);
+                              if (!isNaN(n) && n >= 5 && n <= 480) setManualMinutes(n);
+                            }}
+                            keyboardType="number-pad"
+                            placeholder="min"
+                            placeholderTextColor={Colors.textMuted}
+                            maxLength={3}
+                          />
+                          <TouchableOpacity style={styles.adjBtn} onPress={() => adjustCustom(5)}>
+                            <Text style={styles.adjText}>+</Text>
+                          </TouchableOpacity>
+                          <Text style={styles.minsLabel}>minutes</Text>
+                          <TouchableOpacity onPress={() => setShowCustom(false)}>
+                            <Text style={styles.backText}>← Presets</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
               );
             })}
           </View>
-        </View>
-
-        {/* Water toggle */}
-        <View style={styles.toggleRow}>
-          <View>
-            <Text style={styles.toggleLabel}>Water / Sweat Exposure</Text>
-            <Text style={styles.toggleSub}>Reduce effective SPF time</Text>
-          </View>
-          <Toggle value={water} onValueChange={setWater} />
         </View>
 
         <Button label="Finish Setup  →" onPress={handleFinish} style={{ marginTop: Spacing.xl }} />
@@ -108,8 +173,17 @@ const styles = StyleSheet.create({
   radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
   radioActive: { borderColor: Colors.teal },
   radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.teal },
-  reminderText: { fontSize: FontSizes.sm, color: Colors.textPrimary },
-  toggleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: Spacing.lg, borderRadius: Radii.xl2, backgroundColor: Colors.navyCard, borderWidth: 1, borderColor: Colors.border },
-  toggleLabel: { fontSize: FontSizes.md, fontWeight: FontWeights.medium, color: Colors.textPrimary },
-  toggleSub: { fontSize: FontSizes.sm, color: Colors.textMuted, marginTop: 3 },
+  reminderText:       { fontSize: FontSizes.sm, color: Colors.textPrimary },
+  manualExpanded:     { marginTop: Spacing.sm, paddingHorizontal: Spacing.sm },
+  manualChipRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.xs },
+  manualChip:         { paddingVertical: 8, paddingHorizontal: 14, borderRadius: Radii.xl, backgroundColor: Colors.navy, borderWidth: 1.5, borderColor: Colors.border },
+  manualChipActive:   { backgroundColor: `${Colors.teal}20`, borderColor: Colors.teal },
+  manualChipText:     { fontSize: FontSizes.xs, color: Colors.textPrimary },
+  manualChipTextActive: { color: Colors.teal, fontWeight: FontWeights.semibold },
+  customRow:          { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, flexWrap: 'wrap' },
+  adjBtn:             { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.navy, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
+  adjText:            { fontSize: FontSizes.lg, color: Colors.textPrimary, lineHeight: 22 },
+  customInput:        { width: 64, height: 40, borderRadius: Radii.lg, backgroundColor: Colors.navy, borderWidth: 1.5, borderColor: Colors.teal, color: Colors.textPrimary, fontSize: FontSizes.base, fontWeight: FontWeights.bold, textAlign: 'center' },
+  minsLabel:          { fontSize: FontSizes.xs, color: Colors.textMuted },
+  backText:           { fontSize: FontSizes.xs, color: Colors.teal },
 });

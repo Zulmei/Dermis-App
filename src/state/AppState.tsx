@@ -358,8 +358,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const elapsedRef  = useRef(0);
   const budgetRef   = useRef(0);
-  const prevSkinTypeRef = useRef(defaultProfile.skinType);
-  const prevSpfRef      = useRef(defaultProfile.defaultSpf);
+  const prevSkinTypeRef  = useRef(defaultProfile.skinType);
+  const prevSpfRef       = useRef(defaultProfile.defaultSpf);
+  const prevReminderRef  = useRef(defaultProfile.reapplyReminder);
+  const prevManualMinRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const skinChanged = profile.skinType   !== prevSkinTypeRef.current;
@@ -367,17 +369,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!skinChanged && !spfChanged) return;
     prevSkinTypeRef.current = profile.skinType;
     prevSpfRef.current      = profile.defaultSpf;
+    if (profile.reapplyReminder !== 'Based on UV Exposure') return;
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     elapsedRef.current = 0;
     const total = calcSafeExposureSeconds(profile.skinType, profile.defaultSpf, uvData);
     setTimer({ totalSeconds: total, secondsLeft: total, isRunning: false, isPaused: false });
-  }, [profile.skinType, profile.defaultSpf, uvData]);
+  }, [profile.skinType, profile.defaultSpf, profile.reapplyReminder, uvData]);
 
   const prevUVRef = useRef(mockUVData.uv);
   useEffect(() => {
     const newUV = uvData.uv;
     if (newUV === prevUVRef.current) return;
     prevUVRef.current = newUV;
+    if (profile.reapplyReminder !== 'Based on UV Exposure') return;
     const newTotal = calcSafeExposureSeconds(profile.skinType, profile.defaultSpf, uvData);
     setTimer(prev => {
       const newLeft = prev.isRunning || prev.isPaused
@@ -385,7 +389,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         : newTotal;
       return { ...prev, totalSeconds: newTotal, secondsLeft: newLeft };
     });
-  }, [uvData, profile.skinType, profile.defaultSpf]);
+  }, [uvData, profile.skinType, profile.defaultSpf, profile.reapplyReminder]);
+
+  useEffect(() => {
+    const reminderChanged  = profile.reapplyReminder      !== prevReminderRef.current;
+    const manualMinChanged = profile.manualReminderMinutes !== prevManualMinRef.current;
+    if (!reminderChanged && !manualMinChanged) return;
+    prevReminderRef.current   = profile.reapplyReminder;
+    prevManualMinRef.current  = profile.manualReminderMinutes;
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
+    elapsedRef.current = 0;
+    let total: number;
+    if (profile.reapplyReminder === 'Every 2 hours') {
+      total = 7200;
+    } else if (profile.reapplyReminder === 'Manual reminders' && profile.manualReminderMinutes) {
+      total = profile.manualReminderMinutes * 60;
+    } else {
+      total = calcSafeExposureSeconds(profile.skinType, profile.defaultSpf, uvData);
+    }
+    setTimer({ totalSeconds: total, secondsLeft: total, isRunning: false, isPaused: false });
+  }, [profile.reapplyReminder, profile.manualReminderMinutes, profile.skinType, profile.defaultSpf, uvData]);
 
   const startTimer = useCallback(() => {
     if (intervalRef.current) return;
@@ -419,7 +442,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
     }
     elapsedRef.current = 0;
-    const total = calcSafeExposureSeconds(profile.skinType, profile.defaultSpf, uvData);
+    let total: number;
+    if (profile.reapplyReminder === 'Every 2 hours') {
+      total = 7200;
+    } else if (profile.reapplyReminder === 'Manual reminders' && profile.manualReminderMinutes) {
+      total = profile.manualReminderMinutes * 60;
+    } else {
+      total = calcSafeExposureSeconds(profile.skinType, profile.defaultSpf, uvData);
+    }
     setTimer({ totalSeconds: total, secondsLeft: total, isRunning: false, isPaused: false });
   }, [profile, uvData]);
 

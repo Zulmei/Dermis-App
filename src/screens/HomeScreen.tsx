@@ -1,5 +1,5 @@
 // src/screens/HomeScreen.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,9 +7,10 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  ActionSheetIOS,
 } from 'react-native';
 import { Colors, FontSizes, FontWeights, Spacing, Radii } from '../theme';
-import { Card, CircularTimer, ProgressBar, ScreenWrapper, Button } from '../components';
+import { Card, CircularTimer, ProgressBar, ScreenWrapper, Button, ManualReminderModal } from '../components';
 import { useAppState } from '../state/AppState';
 import { mockLocation } from '../data/mockData';
 import { uvColor, uvLabel } from '../theme/tokens';
@@ -45,7 +46,7 @@ export function HomeScreen({ navigation }: Props) {
   const {
     timer, startTimer, pauseTimer, resetTimer,
     budgetUsedPct,
-    profile,
+    profile, setProfile,
     uvData,
     weatherData,
     currentUV,
@@ -86,10 +87,40 @@ export function HomeScreen({ navigation }: Props) {
   const spfStr        = spfLabel(profile.defaultSpf ?? 0);
   const timerSubLabel = `Skin Type ${profile.skinType} · ${spfStr} applied`;
 
-  const reapplyHint: string | null =
-    profile.reapplyReminder && profile.reapplyReminder !== 'Manual reminders'
-      ? `Reapply reminder: ${profile.reapplyReminder.toLowerCase()}`
-      : null;
+  const REMINDER_OPTIONS = ['Based on UV Exposure', 'Every 2 hours', 'Manual reminders'];
+  const [showManualModal, setShowManualModal] = useState(false);
+
+  const handleReapplySheet = () => {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: 'Change Reapply Reminder',
+        options: [...REMINDER_OPTIONS, 'Cancel'],
+        cancelButtonIndex: 3,
+        userInterfaceStyle: 'dark',
+      },
+      (index) => {
+        if (index === 2) {
+          setShowManualModal(true);
+        } else if (index < 3) {
+          setProfile({ ...profile, reapplyReminder: REMINDER_OPTIONS[index] });
+        }
+      },
+    );
+  };
+
+  const handleManualConfirm = (minutes: number) => {
+    setProfile({ ...profile, reapplyReminder: 'Manual reminders', manualReminderMinutes: minutes });
+  };
+
+  const reapplyLabel = (() => {
+    if (profile.reapplyReminder === 'Manual reminders' && profile.manualReminderMinutes) {
+      const h = Math.floor(profile.manualReminderMinutes / 60);
+      const m = profile.manualReminderMinutes % 60;
+      const dur = h > 0 && m > 0 ? `${h}h ${m}m` : h > 0 ? `${h}h` : `${m}m`;
+      return `Manual · ${dur}`;
+    }
+    return profile.reapplyReminder;
+  })();
 
   const sessionInProgress = timer.isRunning || timer.isPaused;
   const timerBtnLabel = sessionInProgress ? '▶  Continue' : '▶  Start Exposure';
@@ -184,12 +215,10 @@ export function HomeScreen({ navigation }: Props) {
             <CircularTimer pct={pct} label={timerLabel} sublabel="remaining" size={200} strokeWidth={8} color={col} />
           </View>
           <Text style={styles.timerSub}>{timerSubLabel}</Text>
-          {reapplyHint ? (
-            <View style={styles.reapplyRow}>
-              <Text style={styles.reapplyIcon}>🧴</Text>
-              <Text style={styles.reapplyText}>{reapplyHint}</Text>
-            </View>
-          ) : null}
+          <TouchableOpacity style={styles.reapplyRow} onPress={handleReapplySheet} activeOpacity={0.7}>
+            <Text style={styles.reapplyText}>🧴 {reapplyLabel}</Text>
+            <Text style={styles.reapplyChevron}>▾</Text>
+          </TouchableOpacity>
           <View style={styles.timerButtons}>
             <Button
               label={timerBtnLabel}
@@ -246,6 +275,13 @@ export function HomeScreen({ navigation }: Props) {
         </View>
 
       </ScrollView>
+
+      <ManualReminderModal
+        visible={showManualModal}
+        current={profile.manualReminderMinutes}
+        onConfirm={handleManualConfirm}
+        onClose={() => setShowManualModal(false)}
+      />
     </ScreenWrapper>
   );
 }
@@ -277,8 +313,8 @@ const styles = StyleSheet.create({
   timerCenter:    { alignItems: 'center', marginBottom: Spacing.lg },
   timerSub:       { fontSize: FontSizes.sm, color: Colors.textMuted, textAlign: 'center', marginBottom: Spacing.sm },
   reapplyRow:     { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: Spacing.xs, marginBottom: Spacing.lg },
-  reapplyIcon:    { fontSize: FontSizes.sm },
   reapplyText:    { fontSize: FontSizes.sm, color: Colors.amber },
+  reapplyChevron: { fontSize: FontSizes.sm, color: Colors.amber },
   timerButtons:   { flexDirection: 'row', gap: Spacing.md },
   resetBtn:       { flex: 1, paddingVertical: 16, borderRadius: Radii.xl2, backgroundColor: Colors.navyCard, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', justifyContent: 'center' },
   resetText:      { fontSize: FontSizes.sm, color: Colors.textMuted },
